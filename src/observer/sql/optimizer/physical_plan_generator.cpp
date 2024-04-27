@@ -21,6 +21,8 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/predicate_logical_operator.h"
 #include "sql/operator/predicate_physical_operator.h"
 #include "sql/operator/project_logical_operator.h"
+#include "sql/operator/aggregate_logical_operator.h"
+#include "sql/operator/aggregate_physical_operator.h"
 #include "sql/operator/project_physical_operator.h"
 #include "sql/operator/insert_logical_operator.h"
 #include "sql/operator/insert_physical_operator.h"
@@ -34,6 +36,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/calc_physical_operator.h"
 #include "sql/expr/expression.h"
 #include "common/log/log.h"
+#include "physical_plan_generator.h"
 
 using namespace std;
 
@@ -74,6 +77,10 @@ RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<P
       return create_plan(static_cast<JoinLogicalOperator &>(logical_operator), oper);
     } break;
 
+    case LogicalOperatorType::AGGREGATE: {
+      return create_plan(static_cast<AggregateLogicalOperator &>(logical_operator), oper);
+      break;
+    }
     default: {
       return RC::INVALID_ARGUMENT;
     }
@@ -283,7 +290,6 @@ RC PhysicalPlanGenerator::create_plan(JoinLogicalOperator &join_oper, unique_ptr
   oper = std::move(join_physical_oper);
   return rc;
 }
-
 RC PhysicalPlanGenerator::create_plan(CalcLogicalOperator &logical_oper, std::unique_ptr<PhysicalOperator> &oper)
 {
   RC rc = RC::SUCCESS;
@@ -291,4 +297,36 @@ RC PhysicalPlanGenerator::create_plan(CalcLogicalOperator &logical_oper, std::un
   oper.reset(calc_oper);
   return rc;
 }
+RC PhysicalPlanGenerator::create_plan(AggregateLogicalOperator &aggregate_oper,unique_ptr<PhysicalOperator> &oper)
+{
+  vector<unique_ptr<LogicalOperator>> &children_opers = aggregate_oper. children();
+  ASSERT(children_opers. size() ==1,"aggregate logical operator's sub op er number should be 1");
 
+  LogicalOperator &child_oper = *children_opers. front();
+
+  unique_ptr<PhysicalOperator> child_phy_oper;
+  RC rc = create(child_oper, child_phy_oper);
+  if (rc != RC::SUCCESS) 
+  {
+    LOG_WARN("failed to create child operator of predicate operator. rc=%s", strrc(rc));
+    return rc;
+  }
+
+  AggregatePhysicalOperator *aggregate_operator = new AggregatePhysicalOperator;
+  const vector<Field> &aggregate_fields = aggregate_oper. fields();
+  LOG_TRACE("got %d aggregation fields", aggregate_fields. size());
+  for (const Field &field : aggregate_fields) 
+  {
+    aggregate_operator->add_aggregation(field. aggregation());
+  }
+
+  if (child_phy_oper) 
+  {
+    aggregate_operator->add_child(std::move(child_phy_oper));
+  }
+
+  oper = unique_ptr<PhysicalOperator>(aggregate_operator);
+  
+  LOG_TRACE("create an aggregate physical operator");
+  return rc;
+}

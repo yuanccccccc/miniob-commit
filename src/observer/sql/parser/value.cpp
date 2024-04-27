@@ -58,12 +58,6 @@ Value::Value(const char *s, int len /*= 0*/)
   set_string(s, len);
 }
 
-// Value::Value(const char *date, int len,int flag)
-// {
-//   int intDate=0;
-//   strDate_to_intDate_(date,intDate);
-//   set_date(intDate);
-// }
 Value::Value(int y,int m,int d){
   set_date(y,m,d);
 }
