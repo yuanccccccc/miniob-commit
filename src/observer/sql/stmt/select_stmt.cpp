@@ -36,6 +36,9 @@ static void wildcard_fields(Table *table, std::vector<Field> &field_metas,AggrOp
       field_metas.push_back(Field(table, table_meta.field(i),AggrOp::AGGR_COUNT_ALL));
       break;
     }
+    else{
+      field_metas.push_back(Field(table, table_meta.field(i)));
+    }
   }
 }
 
@@ -90,7 +93,10 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
           return RC::INVALID_ARGUMENT;
         }
       for (Table *table : tables) {
+        if(have_aggregation_)
         wildcard_fields(table, query_fields,AggrOp::AGGR_COUNT);
+        else
+        wildcard_fields(table, query_fields);
       }
 
     } else if (!common::is_blank(relation_attr.relation_name.c_str())) {
