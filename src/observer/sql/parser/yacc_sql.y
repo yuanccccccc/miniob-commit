@@ -56,6 +56,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 //标识tokens
 %token  SEMICOLON
         SUM_F
+        INNER
         MAX_F
         MIN_F
         AVG_F
@@ -117,6 +118,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   Expression *                      expression;
   std::vector<Expression *> *       expression_list;
   std::vector<Value> *              value_list;
+  JoinSqlNode *                     join_list;
   std::vector<ConditionSqlNode> *   condition_list;
   std::vector<RelAttrSqlNode> *     rel_attr_list;
   std::vector<std::string> *        relation_list;
@@ -130,6 +132,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %token <string> ID
 %token <string> DATE_STR
 %token <string> SSS
+%token <string> JOIN
 //非终结符
 
 /** type 定义了各种解析后的结果输出的是什么类型。类型对应了 union 中的定义的成员变量名称 **/
@@ -148,6 +151,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %type <condition_list>      condition_list
 %type <rel_attr_list>       select_attr
 %type <relation_list>       rel_list
+%type <join_list>           join_list
 %type <rel_attr_list>       attr_list
 %type <rel_attr_list>       rel_attr_aggr_list
 %type <expression>          expression
@@ -441,8 +445,36 @@ update_stmt:      /*  update 语句的语法解析树*/
       free($4);
     }
     ;
+join_list:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | INNER join_list
+    {
+      $$ = $2;
+    }
+    | JOIN ID ON condition_list join_list
+    {
+      $$ = new JoinSqlNode();
+
+      if ($4 != nullptr) {
+        $$->conditions.swap(*$4);
+        delete $4;
+      }
+      $$->relations.push_back($2);
+      free($2);
+
+      if ($5 != nullptr) {
+        $$->relations.insert($$->relations.end(),$5->relations.begin(),$5->relations.end());
+        $$->conditions.insert($$->conditions.end(),$5->conditions.begin(),$5->conditions.end());
+        delete $5;
+      }
+    }
+    ;
+
 select_stmt:        /*  select 语句的语法解析树*/
-    SELECT select_attr FROM ID rel_list where
+    SELECT select_attr FROM ID rel_list join_list where
     {
       $$ = new ParsedSqlNode(SCF_SELECT);
       if ($2 != nullptr) {
@@ -456,11 +488,17 @@ select_stmt:        /*  select 语句的语法解析树*/
       $$->selection.relations.push_back($4);
       std::reverse($$->selection.relations.begin(), $$->selection.relations.end());
 
-      if ($6 != nullptr) {
-        $$->selection.conditions.swap(*$6);
-        delete $6;
+      if ($7 != nullptr) {
+        $$->selection.conditions.swap(*$7);
+        delete $7;
       }
       free($4);
+
+      if($6 != nullptr){
+        $$->selection.relations.insert($$->selection.relations.end(),$6->relations.begin(),$6->relations.end());
+        $$->selection.conditions.insert($$->selection.conditions.end(),$6->conditions.begin(),$6->conditions.end());
+        delete $6;
+      }
     }
     ;
 calc_stmt:
